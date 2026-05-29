@@ -1,0 +1,411 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;500&display=swap');
+
+/* ─── Tokens ──────────────────────────────────────────────────────────────── */
+:root {
+    --bg: #f5f2eb;
+    --fg: #1a1a1a;
+    --fg-muted: #666;
+    --accent: #c8922a;
+    --accent-dim: #a87820;
+    --surface: #fffffc;
+    --border: #d4cebc;
+    --settings-bg: rgba(250, 247, 240, 0.97);
+    --settings-shadow: 0 1px 0 var(--border), 0 4px 24px rgba(0,0,0,0.06);
+    --btn-bg: #1a1a1a;
+    --btn-fg: #f5f2eb;
+    --btn-hover: #333;
+    --fin-color: #b94040;
+    --clock-size: 18vw;
+    --info-size: 3.8vw;
+    --label-size: 1.1vw;
+}
+
+
+[data-theme="extra"] {
+    --bg: #2a1f00;
+    --fg: #fde9b0;
+    --fg-muted: #c8a055;
+    --accent: #f0b429;
+    --accent-dim: #d4962a;
+    --surface: #331f00;
+    --border: #4a3510;
+    --settings-bg: rgba(35, 25, 0, 0.97);
+    --settings-shadow: 0 1px 0 var(--border), 0 4px 24px rgba(0,0,0,0.5);
+    --btn-bg: #f0b429;
+    --btn-fg: #1a1000;
+    --btn-hover: #f5c040;
+    --fin-color: #ff8a8a;
+}
+
+[data-theme="dark"] {
+    --bg: #0d0d0d;
+    --fg: #f0ead8;
+    --fg-muted: #888;
+    --accent: #d4a043;
+    --accent-dim: #b88030;
+    --surface: #141414;
+    --border: #2a2a2a;
+    --settings-bg: rgba(15, 15, 15, 0.97);
+    --settings-shadow: 0 1px 0 var(--border), 0 4px 24px rgba(0,0,0,0.5);
+    --btn-bg: #d4a043;
+    --btn-fg: #0d0d0d;
+    --btn-hover: #e0b050;
+    --fin-color: #e06060;
+}
+
+/* ─── Reset & base ───────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+}
+
+body {
+    font-family: 'Barlow', sans-serif;
+    background-color: var(--bg);
+    color: var(--fg);
+    cursor: default;
+    transition: background-color 0.6s ease, color 0.6s ease;
+}
+
+body.cursor-hidden { cursor: none; }
+
+/* ─── Settings bar ───────────────────────────────────────────────────────── */
+.settings {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background: var(--settings-bg);
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--settings-shadow);
+    padding: 0 20px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    z-index: 1000;
+    transition: transform 0.35s cubic-bezier(0.4,0,0.2,1),
+                opacity 0.35s ease,
+                background-color 0.6s ease,
+                border-color 0.6s ease;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.settings-brand {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    flex-shrink: 0;
+    margin-right: 8px;
+}
+
+/* ─── Form ───────────────────────────────────────────────────────────────── */
+#timerSettings {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex: 1;
+}
+
+.field-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.field-group label {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    white-space: nowrap;
+}
+
+#duration {
+    width: 68px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--fg);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    text-align: center;
+    transition: border-color 0.2s, background 0.6s, color 0.6s;
+    outline: none;
+}
+
+#duration:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* Custom checkbox */
+.checkbox-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.checkbox-wrap input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid var(--border);
+    border-radius: 3px;
+    background: var(--surface);
+    cursor: pointer;
+    position: relative;
+    transition: border-color 0.2s, background 0.2s;
+    flex-shrink: 0;
+}
+
+.checkbox-wrap input[type="checkbox"]:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.checkbox-wrap input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 4px;
+    width: 5px; height: 8px;
+    border: 2px solid #fff;
+    border-top: none; border-left: none;
+    transform: rotate(45deg);
+}
+
+.settings-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+/* ─── Buttons ────────────────────────────────────────────────────────────── */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 4px;
+    font-family: 'Barlow', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s, transform 0.1s;
+    white-space: nowrap;
+}
+
+.btn:active { transform: scale(0.97); }
+
+.btn-primary {
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+}
+
+.btn-primary:hover { background: var(--btn-hover); }
+
+.btn-primary.shift-held {
+    background: #2d7a3a;
+    color: #fff;
+}
+
+
+.btn-secondary {
+    background: transparent;
+    color: var(--fg-muted);
+    border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+    color: var(--fg);
+    border-color: var(--fg-muted);
+}
+
+.btn-icon {
+    background: transparent;
+    color: var(--fg-muted);
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    font-size: 14px;
+}
+
+.btn-icon:hover {
+    color: var(--fg);
+    border-color: var(--fg-muted);
+}
+
+
+/* ─── Main display ───────────────────────────────────────────────────────── */
+.center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2vw;
+}
+
+/* Decorative rule above clock */
+.clock-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5vw;
+}
+
+.clock-rule {
+    width: 3px;
+    height: 3vw;
+    background: var(--accent);
+    opacity: 0.6;
+    transition: background 0.6s;
+}
+
+#clock {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: var(--clock-size);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--fg);
+    transition: color 0.6s;
+    /* Subtle text shadow for depth */
+    text-shadow: 0 0 80px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+/* ─── Time info row ──────────────────────────────────────────────────────── */
+.timeInfo {
+    display: flex;
+    justify-content: center;
+    gap: 8vw;
+}
+
+.time-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3vw;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.time-block.fade-out {
+    opacity: 0;
+    transform: translateY(-6px);
+    pointer-events: none;
+}
+
+.time-label {
+    font-size: var(--label-size);
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    opacity: 0.8;
+}
+
+.time-value {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: var(--info-size);
+    color: var(--fg);
+    transition: color 0.6s, opacity 0.4s ease;
+    letter-spacing: 0.02em;
+}
+
+.time-value.blank {
+    opacity: 0;
+}
+
+.time-status {
+    font-size: calc(var(--info-size) * 0.45);
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--fin-color);
+    height: 1.2em; /* Reserve space so layout doesn't shift */
+    display: flex;
+    align-items: center;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+}
+
+.time-status.visible {
+    opacity: 1;
+}
+
+/* Divider between time blocks */
+.time-divider {
+    width: 1px;
+    height: 5vw;
+    background: var(--border);
+    align-self: center;
+    transition: background 0.6s, opacity 0.5s ease;
+}
+
+#extraTimeInfo,
+#extraTimeDivider {
+    display: none; /* JS shows this */
+}
+
+/* Extra time block fade in/out */
+#extraTimeInfo.fading,
+#extraTimeDivider.fading {
+    display: flex;
+    opacity: 0;
+    transform: translateY(-6px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+#extraTimeInfo.fading-in,
+#extraTimeDivider.fading-in {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+
+
+/* ─── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 700px) {
+    :root {
+        --clock-size: 22vw;
+        --info-size: 6vw;
+        --label-size: 2.2vw;
+    }
+    .timeInfo { gap: 6vw; }
+    .time-divider { display: none; }
+}
+
+/* ─── Waiting label ──────────────────────────────────────────────────────── */
+.waiting-label {
+    font-size: 1.4vw;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    min-height: 1.6em;
+}
+
+.waiting-label.visible {
+    visibility: visible;
+    opacity: 0.7;
+    animation: waiting-pulse 2s ease-in-out infinite;
+}
+
+@keyframes waiting-pulse {
+    0%, 100% { opacity: 0.5; }
+    50%       { opacity: 0.9; }
+}
