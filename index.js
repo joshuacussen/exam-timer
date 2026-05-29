@@ -1,292 +1,486 @@
-var endTime;
-var startTime;
-var extraTimeEnabled = false;
-var extraEndTime;
-var endTimeFinFlag = false;
-var extraEndTimeFinFlag = false;
-var startTimeFlag = false;
-var duration;
-var timerRunning = false;
+// ─── State ────────────────────────────────────────────────────────────────────
+const state = {
+    startTime:          undefined,
+    endTime:            undefined,
+    extraEndTime:       undefined,
+    extraTimeEnabled:   false,
+    startTimeFlag:      false,
+    endTimeFinFlag:     false,
+    extraEndTimeFinFlag: false,
+    timerRunning:       false,
+    duration:           null,
+};
 
+let shiftHeld = false;
+
+// ─── Time helpers ─────────────────────────────────────────────────────────────
 function getCurrentTime() {
-    now = new Date();
-    return now;
+    return new Date();
 }
 
-function whiteBackground() {
-    const whitebgCSS = 'whitebg.css';
-    const colors = document.getElementById('colors');
-    colors.setAttribute('href', whitebgCSS);
+function addMinutes(date, minutes) {
+    return new Date(date.getTime() + minutes * 60000);
 }
 
-function blackBackground() {
-    const blackbgCSS = 'blackbg.css';
-    colors.setAttribute('href', blackbgCSS);
+function padWithLeadingZero(i) {
+    return i < 10 ? '0' + i : i;
 }
 
-function replaceWithNbsp(element) {
-    element.innerHTML = "&nbsp;";
+function timeToStr(time) {
+    return [time.getHours(), time.getMinutes(), time.getSeconds()]
+        .map(padWithLeadingZero)
+        .join(':');
+}
+
+function calculateNextNearestMinute(date) {
+    const coefficient = 1000 * 60;
+    return new Date(Math.ceil(date.getTime() / coefficient) * coefficient);
+}
+
+// ─── localStorage ─────────────────────────────────────────────────────────────
+const STORAGE_KEYS = {
+    duration:    'examTimer_duration',
+    timerState:  'examTimer_state',
+};
+
+function saveDuration(duration) {
+    localStorage.setItem(STORAGE_KEYS.duration, duration);
+}
+
+function loadDuration() {
+    return localStorage.getItem(STORAGE_KEYS.duration) || '60';
+}
+
+function saveTimerState() {
+    localStorage.setItem(STORAGE_KEYS.timerState, JSON.stringify({
+        startTime:        state.startTime?.getTime(),
+        endTime:          state.endTime?.getTime(),
+        extraEndTime:     state.extraEndTime?.getTime(),
+        extraTimeEnabled: state.extraTimeEnabled,
+        duration:         state.duration,
+    }));
+}
+
+function clearTimerState() {
+    localStorage.removeItem(STORAGE_KEYS.timerState);
+}
+
+// ─── Audio ────────────────────────────────────────────────────────────────────
+// 1 chime = start, 2 = normal end, 3 = extra time end
+const CHIME_FREQS = {
+    1: [523],           // C5
+    2: [523, 659],      // C5 → E5
+    3: [523, 659, 784], // C5 → E5 → G5
+};
+
+function playChime(count) {
+    try {
+        const ctx   = new (window.AudioContext || window.webkitAudioContext)();
+        const freqs = CHIME_FREQS[count] || CHIME_FREQS[1];
+        freqs.forEach((freq, i) => {
+            const osc  = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type           = 'sine';
+            osc.frequency.value = freq;
+            const t = ctx.currentTime + i * 0.22;
+            gain.gain.setValueAtTime(0, t);
+            gain.gain.linearRampToValueAtTime(0.35, t + 0.04);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+            osc.start(t);
+            osc.stop(t + 0.6);
+        });
+    } catch (e) {}
+}
+
+// ─── DOM helpers ──────────────────────────────────────────────────────────────
+function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+}
+
+function checkExtraTime() {
+    return document.getElementById('extraTimeToggle').checked;
+}
+
+// Fade out a time value, swap its text, then fade back in
+function fadeInValue(id, text) {
+    const el = document.getElementById(id);
+    el.classList.add('blank');
+    setTimeout(() => {
+        el.textContent = text;
+        el.classList.remove('blank');
+    }, 200);
 }
 
 function clearTimesAndStatuses() {
-    const elementIds = ["startTime", "endTime", "endTimeStatus", "extraEndTime", "extraEndTimeStatus"];
-    for (elementId of elementIds) {
-        replaceWithNbsp(document.getElementById(elementId));
+    ['startTime', 'endTime', 'extraEndTime'].forEach(id =>
+        document.getElementById(id).classList.add('blank')
+    );
+    ['endTimeStatus', 'extraEndTimeStatus'].forEach(id =>
+        document.getElementById(id).classList.remove('visible')
+    );
+}
+
+function showFinStatus(id) {
+    const el = document.getElementById(id);
+    el.textContent = 'Fin';
+    el.classList.add('visible');
+}
+
+function hideExtraTimeInfo(instant = false) {
+    ['extraTimeInfo', 'extraTimeDivider'].forEach(id => {
+        const el = document.getElementById(id);
+        if (instant) {
+            el.style.display = 'none';
+        } else {
+            el.classList.add('fading');
+            el.classList.remove('fading-in');
+            setTimeout(() => {
+                el.classList.remove('fading');
+                el.style.display = 'none';
+            }, 500);
+        }
+    });
+}
+
+function showExtraTimeInfo() {
+    ['extraTimeInfo', 'extraTimeDivider'].forEach(id => {
+        const el = document.getElementById(id);
+        el.style.display = id === 'extraTimeDivider' ? 'block' : 'flex';
+        el.classList.add('fading');
+        el.classList.remove('fading-in');
+        void el.offsetWidth; // force reflow so transition fires
+        el.classList.add('fading-in');
+        setTimeout(() => el.classList.remove('fading', 'fading-in'), 500);
+    });
+}
+
+function showSettingsMenu() {
+    const menu = document.querySelector('.settings');
+    menu.style.transform = 'translateY(0)';
+    menu.style.opacity   = '1';
+}
+
+function setStartButtonVisible(visible) {
+    document.getElementById('start').style.display = visible ? '' : 'none';
+}
+
+function setApplyButtonVisible(visible) {
+    const btn = document.getElementById('applyExtraTime');
+    if (!btn) return;
+    if (visible) {
+        btn.textContent  = checkExtraTime() ? 'Apply extra time' : 'Remove extra time';
+        btn.style.display = '';
+    } else {
+        btn.style.display = 'none';
     }
 }
 
+function showWaitingLabel(startTime) {
+    const el = document.getElementById('waitingLabel');
+    el.textContent = 'Starting at ' + timeToStr(startTime);
+    el.classList.add('visible');
+}
+
+function hideWaitingLabel() {
+    const el = document.getElementById('waitingLabel');
+    el.classList.remove('visible');
+    el.textContent = '';
+}
+
+// ─── Reset ────────────────────────────────────────────────────────────────────
 function resetGlobals() {
-    endTime = undefined;
-    extraEndTime = undefined;
-    endTimeFinFlag = false;
-    extraEndTimeFinFlag = false;
-    startTimeFlag = false;
-    startTime = undefined;
-    timerRunning = false;
+    state.startTime           = undefined;
+    state.endTime             = undefined;
+    state.extraEndTime        = undefined;
+    state.startTimeFlag       = false;
+    state.endTimeFinFlag      = false;
+    state.extraEndTimeFinFlag = false;
+    state.timerRunning        = false;
 }
 
 function resetClock(event) {
     event.preventDefault();
-    whiteBackground();
-    if (!checkExtraTime()) {
-        hideExtraTimeInfo();
-    }
+    setTheme('light');
+    hideExtraTimeInfo(true);
     clearTimesAndStatuses();
     resetGlobals();
+    clearTimerState();
+    setApplyButtonVisible(false);
+    setStartButtonVisible(true);
+    hideWaitingLabel();
 }
 
-
-
-function addMinutes(date, minutes) {
-    // Add given number of minutes to date, return new date
-    const millisecondsPerMinute = 60000;
-    var newTime = new Date(date.getTime() + minutes * millisecondsPerMinute);
-    return newTime;
-}
-
-function padWithLeadingZero(i) {
-    // Add a leading 0 to a number if it is less than 10, e.g. 9 becomes 09
-    if (i < 10) {
-        i = "0" + i;
-    }
-    return i;
-}
-
-
-function hideExtraTimeInfo() {
-    const extraTimeInfoVisibility = document.getElementById('extraTimeInfo');
-    extraTimeInfoVisibility.style.display = 'none';
-}
-
-function showExtraTimeInfo() {
-    const extraTimeInfoVisibility = document.getElementById('extraTimeInfo');
-    extraTimeInfoVisibility.style.display = 'block';
-}
-
-function timeToStr(time) {
-    // Convert time to string in format hh:mm:ss
-    var hours = time.getHours();
-    var minutes = time.getMinutes();
-    var seconds = time.getSeconds();
-
-    hours = padWithLeadingZero(hours);
-    minutes = padWithLeadingZero(minutes);
-    seconds = padWithLeadingZero(seconds);
-
-    var clockStr = hours + ":" + minutes + ":" + seconds;
-    return clockStr;
+// ─── Timer events ─────────────────────────────────────────────────────────────
+function startTimeStatusSwitch() {
+    setTheme('dark');
+    state.startTimeFlag = true;
+    hideWaitingLabel();
+    playChime(1);
 }
 
 function endTimeStatusSwitch() {
-    var endTimeStatus = document.getElementById("endTimeStatus");
-    endTimeStatus.textContent = "Fin";
-    endTimeFinFlag = true;
-    // Apply the flash animation
-    document.body.classList.add('flash-background-black');
-    // Remove the flash animation class after the animation ends
-    setTimeout(() => {
-        document.body.classList.remove('flash-background-black');
-    }, 5000); // Duration should match the animation duration (1s in this case)
-    whiteBackground();
+    showFinStatus('endTimeStatus');
+    state.endTimeFinFlag = true;
+    if (state.extraTimeEnabled) {
+        setTheme('extra');
+    } else {
+        setTheme('light');
+        clearTimerState();
+    }
+    playChime(2);
 }
 
 function extraEndTimeStatusSwitch() {
-    var extraEndTimeStatus = document.getElementById("extraEndTimeStatus");
-    extraEndTimeStatus.textContent = "Fin";
-    extraEndTimeFinFlag = true;
-    document.body.classList.add('flash-background-white');
-    setTimeout(() => {
-        document.body.classList.remove('flash-background-black');
-    }, 5000); // Duration should match the animation duration (1s in this case)
+    showFinStatus('extraEndTimeStatus');
+    state.extraEndTimeFinFlag = true;
+    setTheme('light');
+    playChime(3);
+    clearTimerState();
 }
 
-function startTimeStatusSwitch() {
-    blackBackground();
-    startTimeFlag = true;
-}
-
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
+// ─── Clock loop ───────────────────────────────────────────────────────────────
 function updateTime() {
-    var now = getCurrentTime();
-    if (now >= startTime && startTimeFlag === false) {
+    const now = getCurrentTime();
+
+    if (state.startTime && now >= state.startTime && !state.startTimeFlag) {
         startTimeStatusSwitch();
     }
-    if (now >= endTime && endTimeFinFlag === false) {
+
+    if (state.endTime && now >= state.endTime && !state.endTimeFinFlag) {
         endTimeStatusSwitch();
-        if (!extraTimeEnabled) {
-            timerRunning = false;
+        if (!state.extraTimeEnabled) {
+            state.timerRunning = false;
+            setStartButtonVisible(true);
             showSettingsMenu();
         }
-    } else if (extraTimeEnabled === true && now >= extraEndTime && extraEndTimeFinFlag === false) {
+    } else if (state.extraTimeEnabled && state.extraEndTime && now >= state.extraEndTime && !state.extraEndTimeFinFlag) {
         extraEndTimeStatusSwitch();
-        timerRunning = false;
+        state.timerRunning = false;
+        setStartButtonVisible(true);
         showSettingsMenu();
     }
-    var clockStr = timeToStr(now);
-    document.getElementById("clock").textContent = clockStr;
-    setTimeout(updateTime, 10);
+
+    document.getElementById('clock').textContent = timeToStr(now);
+    setTimeout(updateTime, 100);
 }
 
+// ─── Validation & start ───────────────────────────────────────────────────────
 function validateSettings() {
-    duration = document.forms["timerSettings"].duration.value;
-    if (duration == null || duration == "" || duration <= 0) {
-        var errorMessage = "Invalid duration: " + duration + "\nDuration must be greater than 0";
-        console.error(errorMessage);
-        alert(errorMessage);
+    const duration = document.forms['timerSettings'].duration.value;
+    if (!duration || duration <= 0) {
+        alert(`Invalid duration: "${duration}"\nDuration must be greater than 0`);
         return false;
-    } else {
-        return true;
     }
+    state.duration = duration;
+    return true;
+}
+
+function startTimer() {
+    const extraTimeMultiplier = 1.25;
+    state.extraTimeEnabled = checkExtraTime();
+    setApplyButtonVisible(false);
+
+    state.startTime    = shiftHeld ? getCurrentTime() : calculateNextNearestMinute(getCurrentTime());
+    state.endTime      = addMinutes(state.startTime, state.duration);
+    state.extraEndTime = addMinutes(state.startTime, state.duration * extraTimeMultiplier);
+
+    fadeInValue('startTime', timeToStr(state.startTime));
+    fadeInValue('endTime',   timeToStr(state.endTime));
+
+    if (state.extraTimeEnabled) {
+        showExtraTimeInfo();
+        fadeInValue('extraEndTime', timeToStr(state.extraEndTime));
+    } else {
+        hideExtraTimeInfo();
+    }
+
+    state.timerRunning = true;
+    setStartButtonVisible(false);
+    showWaitingLabel(state.startTime);
+    saveDuration(state.duration);
+    saveTimerState();
 }
 
 function preflightChecks(event) {
     event.preventDefault();
-    resetClock(event)
-    var validSettings = validateSettings();
-    if (validSettings) {
-        startTimer(event);
+    resetClock(event);
+    if (validateSettings()) {
+        startTimer();
     }
 }
 
-function checkExtraTime() {
-    const checkbox = document.getElementById("extraTimeToggle");
-    return checkbox.checked;
+// ─── Extra time toggle (mid-exam) ─────────────────────────────────────────────
+function onExtraTimeToggleChange() {
+    if (!state.timerRunning || state.endTimeFinFlag) return;
+    setApplyButtonVisible(checkExtraTime() !== state.extraTimeEnabled);
 }
 
-function calculateNextNearestMinute(date) {
-    // Round given date to next nearest minute
-    const coefficient = 1000 * 60;
-    const roundedTime = new Date(Math.ceil(date.getTime() / coefficient) * coefficient);
-    return roundedTime;
-}
-
-function startTimer(event) {
-    const extraTimeMultiplier = 1.25;
-    extraTimeEnabled = checkExtraTime();
-    var minutes = duration;
-    startTime = getCurrentTime()
-    if (!event.shiftKey) { // If shift is held down, start the timer immediately
-        startTime = calculateNextNearestMinute(startTime);
-    }
-    var startTimeStr = timeToStr(startTime);
-
-    endTime = addMinutes(startTime, minutes);
-    var endTimeStr = timeToStr(endTime);
-
-    var extraMinutes = minutes * extraTimeMultiplier;
-    extraEndTime = addMinutes(startTime, extraMinutes);
-    var extraEndTimeStr = timeToStr(extraEndTime);
-
-    document.getElementById("startTime").textContent = startTimeStr;
-    document.getElementById("endTime").textContent = endTimeStr;
-    if (extraTimeEnabled) {
+function applyExtraTimeChange() {
+    if (!state.timerRunning || state.endTimeFinFlag) return;
+    const enable = checkExtraTime();
+    state.extraTimeEnabled = enable;
+    if (enable) {
         showExtraTimeInfo();
-        document.getElementById("extraEndTime").textContent = extraEndTimeStr;
+        fadeInValue('extraEndTime', timeToStr(state.extraEndTime));
+        document.getElementById('extraEndTimeStatus').classList.remove('visible');
+        state.extraEndTimeFinFlag = false;
     } else {
         hideExtraTimeInfo();
+        document.getElementById('extraEndTimeStatus').classList.remove('visible');
+        state.extraEndTimeFinFlag = false;
     }
-    timerRunning = true;
+    setApplyButtonVisible(false);
+    saveTimerState();
 }
 
-function showSettingsMenu() {
-    const settingsMenu = document.querySelector('.settings');
-    settingsMenu.style.transform = 'translateY(0)';
-    settingsMenu.style.opacity = '1';
+// ─── Restore from localStorage ────────────────────────────────────────────────
+// Called inside DOMContentLoaded — DOM is guaranteed ready.
+function restoreTimerState() {
+    const raw = localStorage.getItem(STORAGE_KEYS.timerState);
+    if (!raw) return false;
+
+    let saved;
+    try { saved = JSON.parse(raw); }
+    catch { clearTimerState(); return false; }
+
+    const now          = getCurrentTime();
+    const startTime    = new Date(saved.startTime);
+    const endTime      = new Date(saved.endTime);
+    const extraEndTime = new Date(saved.extraEndTime);
+    const finalEndTime = saved.extraTimeEnabled ? extraEndTime : endTime;
+
+    if (now >= finalEndTime) {
+        clearTimerState();
+        return false;
+    }
+
+    // Restore state
+    Object.assign(state, {
+        startTime,
+        endTime,
+        extraEndTime,
+        extraTimeEnabled:    saved.extraTimeEnabled,
+        duration:            saved.duration,
+        timerRunning:        true,
+        startTimeFlag:       now >= startTime,
+        endTimeFinFlag:      now >= endTime,
+        extraEndTimeFinFlag: now >= extraEndTime,
+    });
+
+    // Restore DOM
+    document.forms['timerSettings'].duration.value = saved.duration;
+    fadeInValue('startTime', timeToStr(startTime));
+    fadeInValue('endTime',   timeToStr(endTime));
+
+    if (now < startTime) showWaitingLabel(startTime);
+
+    if (saved.extraTimeEnabled) {
+        showExtraTimeInfo();
+        fadeInValue('extraEndTime', timeToStr(extraEndTime));
+        if (state.endTimeFinFlag) showFinStatus('endTimeStatus');
+    }
+
+    // Restore theme
+    if (state.startTimeFlag && !state.endTimeFinFlag) {
+        setTheme('dark');
+    } else if (state.endTimeFinFlag && saved.extraTimeEnabled && !state.extraEndTimeFinFlag) {
+        setTheme('extra');
+        showFinStatus('endTimeStatus');
+    }
+
+    return true;
 }
 
-// toggle visibility of settings bar
+// ─── DOMContentLoaded ────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     const settingsMenu = document.querySelector('.settings');
-
     let isSettingsVisible = true;
 
-    document.addEventListener('mousemove', (event) => {
-        if (timerRunning) { // Only hide settings if the timer is running
-            if (event.clientY <= 50) {
-                if (!isSettingsVisible) {
-                    settingsMenu.style.transform = 'translateY(0)';
-                    settingsMenu.style.opacity = '1';
-                    isSettingsVisible = true;
-                }
-            } else {
-                if (isSettingsVisible) {
-                    settingsMenu.style.transform = 'translateY(-100%)';
-                    settingsMenu.style.opacity = '0';
-                    isSettingsVisible = false;
-                }
+    // Restore persisted preferences and state
+    document.forms['timerSettings'].duration.value = loadDuration();
+    if (restoreTimerState()) setStartButtonVisible(false);
+
+    // Form submit (button click or Enter key)
+    document.getElementById('timerSettings').addEventListener('submit', preflightChecks);
+
+    // Extra time toggle
+    document.getElementById('extraTimeToggle').addEventListener('change', onExtraTimeToggleChange);
+    document.getElementById('applyExtraTime').addEventListener('click', applyExtraTimeChange);
+
+    // Shift key for instant start
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Shift') {
+            shiftHeld = true;
+            document.getElementById('start').classList.add('shift-held');
+        }
+        if (e.key === 'Escape') {
+            settingsMenu.style.transform = 'translateY(0)';
+            settingsMenu.style.opacity   = '1';
+            isSettingsVisible = true;
+        }
+    });
+    document.addEventListener('keyup', (e) => {
+        if (e.key === 'Shift') {
+            shiftHeld = false;
+            document.getElementById('start').classList.remove('shift-held');
+        }
+    });
+
+    // Scroll wheel on duration field
+    document.getElementById('duration').addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const current = parseInt(e.currentTarget.value, 10) || 60;
+        e.currentTarget.value = Math.max(1, Math.min(600, current + (e.deltaY < 0 ? 1 : -1)));
+    }, { passive: false });
+
+    // Auto-hide settings bar while timer is running
+    document.addEventListener('mousemove', (e) => {
+        if (state.timerRunning) {
+            if (e.clientY <= 60 && !isSettingsVisible) {
+                settingsMenu.style.transform = 'translateY(0)';
+                settingsMenu.style.opacity   = '1';
+                isSettingsVisible = true;
+            } else if (e.clientY > 60 && isSettingsVisible) {
+                settingsMenu.style.transform = 'translateY(-100%)';
+                settingsMenu.style.opacity   = '0';
+                isSettingsVisible = false;
             }
+        } else {
+            settingsMenu.style.transform = 'translateY(0)';
+            settingsMenu.style.opacity   = '1';
+            isSettingsVisible = true;
         }
     });
+
+    // Cursor hide after inactivity
+    let inactivityTimeout;
+    function hideCursor() { document.body.classList.add('cursor-hidden'); }
+    function showCursor()  { document.body.classList.remove('cursor-hidden'); }
+    function resetInactivityTimer() {
+        showCursor();
+        clearTimeout(inactivityTimeout);
+        inactivityTimeout = setTimeout(hideCursor, 3000);
+    }
+    ['mousemove', 'keypress', 'mousedown', 'scroll'].forEach(evt =>
+        document.addEventListener(evt, resetInactivityTimer)
+    );
+    resetInactivityTimer();
+
+    // Fullscreen button
+    document.getElementById('fullscreenBtn').addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen();
+        } else {
+            document.exitFullscreen();
+        }
+    });
+    document.addEventListener('fullscreenchange', () => {
+        document.getElementById('fullscreenBtn').title =
+            document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen';
+    });
+
+    // Start clock
+    updateTime();
 });
-
-document.addEventListener('DOMContentLoaded', () => {
-    const button = document.getElementById('start');
-
-    // Add event listeners for keydown and keyup
-    document.addEventListener('keydown', (event) => {
-        if (event.key === 'Shift') {
-            button.classList.add('shift-held');
-        }
-    });
-
-    document.addEventListener('keyup', (event) => {
-        if (event.key === 'Shift') {
-            button.classList.remove('shift-held');
-        }
-    });
-
-    // Attach the click event handler to the button
-    button.addEventListener('click', handleCalculateTimesClick);
-});
-
-let inactivityTimeout;
-const inactivityPeriod = 3000; // Time in milliseconds (e.g., 3000ms = 3 seconds)
-
-// Function to handle hiding the cursor
-function hideCursor() {
-    document.body.classList.add('cursor-hidden');
-}
-
-// Function to handle showing the cursor
-function showCursor() {
-    document.body.classList.remove('cursor-hidden');
-}
-
-// Function to reset the inactivity timer
-function resetInactivityTimer() {
-    showCursor(); // Show cursor on user activity
-    clearTimeout(inactivityTimeout); // Clear any existing timeout
-    inactivityTimeout = setTimeout(hideCursor, inactivityPeriod); // Set new timeout
-}
-
-// Attach event listeners to detect user activity
-document.addEventListener('mousemove', resetInactivityTimer);
-document.addEventListener('keypress', resetInactivityTimer);
-document.addEventListener('mousedown', resetInactivityTimer); // For mouse clicks
-document.addEventListener('scroll', resetInactivityTimer); // For scrolling
-
-// Initialize the timer when the page loads
-resetInactivityTimer();

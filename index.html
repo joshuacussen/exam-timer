@@ -1,64 +1,84 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Exam Timer</title>
-    <link rel="stylesheet" href="main.css">
-    <link rel="stylesheet" href="whitebg.css" id="colors">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:ital,wght@0,100..700;1,100..700&display=swap"
-        rel="stylesheet">
-
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text y='32' font-size='32'>⏱</text></svg>">
 </head>
 
-<body onload="updateTime()">
-    <div class="wrapper">
-        <div class="settings">
-            <form id="timerSettings">
-                <ul>
-                    <li><label for="duration">Duration (minutes)
-                            <input type="number" id="duration" />
-                        </label>
-                    </li>
-                    <li><label for="extraTimeToggle">Extra time
-                            <input type="checkbox" id="extraTimeToggle" />
-                        </label>
-                    </li>
+<body>
 
-            <div class="buttons">
-                <button id="start" onclick="preflightChecks(event)" title="Calculate start and end times, starting at the next whole minute. Shift + click to start instantly.">Calculate times</button>
-                <button id="reset" onclick="resetClock(event)">Reset</button>
+    <!-- ── Settings bar ─────────────────────────────────────────── -->
+    <div class="settings">
+        <span class="settings-brand">Exam Timer</span>
+
+        <form id="timerSettings">
+            <div class="field-group">
+                <label for="duration">Duration</label>
+                <input type="number" id="duration" min="1" max="600" value="60" />
+                <span style="font-size:12px;color:var(--fg-muted);font-weight:500;">min</span>
             </div>
-            </form>
+
+            <div class="field-group">
+                <label class="checkbox-wrap" for="extraTimeToggle">
+                    <input type="checkbox" id="extraTimeToggle" />
+                    Extra time (+25%)
+                </label>
+            </div>
+        </form>
+
+        <div class="settings-actions">
+            <button class="btn btn-primary" id="start" type="submit" form="timerSettings"
+                title="Start at the next whole minute">
+                Set times
+            </button>
+            <button class="btn btn-primary" id="applyExtraTime" type="button" style="display:none;"
+                onclick="applyExtraTimeChange()">
+                Apply extra time
+            </button>
+            <button class="btn btn-secondary" type="button" onclick="resetClock(event)">Reset</button>
+            <button class="btn btn-icon" id="fullscreenBtn" title="Fullscreen">⛶</button>
+        </div>
+    </div>
+
+    <!-- ── Main display ─────────────────────────────────────────── -->
+    <div class="center">
+        <div id="waitingLabel" class="waiting-label"></div>
+
+        <div class="clock-wrap">
+            <div class="clock-rule"></div>
+            <div id="clock">--:--:--</div>
         </div>
 
-        <div class="center">
-            <div id="clock"></div>
+        <div class="timeInfo">
+            <div class="time-block">
+                <div class="time-label">Start</div>
+                <div class="time-value" id="startTime">&nbsp;</div>
+                <div class="time-status"></div>
+            </div>
 
-            <div class="timeInfo">
-                <ul>
-                    <li>
-                        Start time
-                        <div id="startTime">&nbsp;</div>
-                    </li>
-                    <li>
-                        End time
-                        <div id="endTime">&nbsp;</div>
-                        <div id="endTimeStatus">&nbsp;</div>
-                    </li>
-                    <li id="extraTimeInfo">
-                        Extra time
-                        <div id="extraEndTime">&nbsp;</div>
-                        <div id="extraEndTimeStatus">&nbsp;</div>
-                    </li>
-                </ul>
+            <div class="time-divider"></div>
+
+            <div class="time-block">
+                <div class="time-label">End</div>
+                <div class="time-value" id="endTime">&nbsp;</div>
+                <div class="time-status" id="endTimeStatus"></div>
+            </div>
+
+            <div class="time-divider" id="extraTimeDivider" style="display:none;"></div>
+
+            <div class="time-block" id="extraTimeInfo">
+                <div class="time-label">Extra time</div>
+                <div class="time-value" id="extraEndTime">&nbsp;</div>
+                <div class="time-status" id="extraEndTimeStatus"></div>
             </div>
         </div>
     </div>
-    <script type="text/javascript" src="index.js"></script>
+
+    <script src="index.js"></script>
 </body>
 
 </html>
